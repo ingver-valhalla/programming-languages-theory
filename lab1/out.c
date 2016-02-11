@@ -5,9 +5,9 @@
  
 
  
-typedef enum States { Normal    , Slash   , Comment,
-                      CPPComment, Asterisk, String ,
-                      CharLit
+typedef enum States { Normal    , Slash   , Comment   ,
+                      CPPComment, Asterisk, String    ,
+                      EscapedStr, CharLit,  EscapedChr
 } States;
     
 int main(int argc, char ** argv)
@@ -15,7 +15,6 @@ int main(int argc, char ** argv)
 	FILE * fi, * fo;          
 	States State = Normal;    
 	int c = 0;            
-	int prev = 0;
 	 
 
 	
@@ -100,38 +99,44 @@ int main(int argc, char ** argv)
 			break;
 
 		case String:
-			if( c == '"' && prev != '\\' ) {
-				fputc( c, fo );
-				State = Normal;
+			fputc( c, fo );
+			if( c == '\\' ) {
+				State = EscapedStr;
 			}
-			else {
-				fputc( c, fo );
+			else if( c == '"' ) {
+				State = Normal;
 			}
 			break;
 
 		case CharLit:
-			if( c == '\'' && prev != '\\' ) {
-				fputc( c, fo );
+			fputc( c, fo );
+			if( c == '\\' ) {
+				State = EscapedChr;
+			}
+			else if( c == '\'' ) {
 				State = Normal;
 			}
-			else {
-				fputc( c, fo );
-			}
+			break;
+		case EscapedStr:
+			fputc( c, fo );
+			State = String;
 			break;
 
+		case EscapedChr:
+			fputc( c, fo );
+			State = CharLit;
+			break;
+            
 		default:
 			fprintf( stderr, "Fatal error: unknown state" );
 			exit( 4 );
-		/* и т.д. обрабатываем все состояния автомата, причем сохранять
-		 * символ в выходной файл можно либо в каждой секции case ..., */
+		 
 		}
 
-		/* ... либо здесь в зависимости от нового (State) и/или предшествующего (для
-		 *      него тогда потребуется, конечно, еще одна переменная) состояния */
-		prev = c;
+		 
 	}
 
-	fclose(fi);    /* не забывайте закрывать файлы! */
-	fclose(fo);    /* особенно выходной, открытый для записи */
-	return 0;      /* а это зачем? */
+	fclose(fi);     
+	fclose(fo);     
+	return 0;       
 }
