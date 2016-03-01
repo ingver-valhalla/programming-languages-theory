@@ -33,10 +33,22 @@ BOOL procI();
 
 void get()
 {
-	if( !isspace( ch ) ) {
+	if( ch != '\n' ) {
 		putchar( ch );
 	}
 	ch = getc( f );
+}
+
+void skip_spaces()
+{
+	while( isspace( ch ) )
+		get();
+}
+
+void skip_trailing()
+{
+	while( isspace( ch ) )
+		ch = getc( f );
 }
 
 BOOL is_letter( char c )
@@ -66,10 +78,12 @@ void print_all()
 
 void error( const char * msg )
 {
-	if( !isspace( ch ) ) {
-		putchar( ch );
-	}
-	printf( "\nE: " );
+	/* printing last symbol */
+	/*if( ch != '\n' )*/
+		/*putchar( ch );*/
+
+	printf( "\n Last symbol: %c\n", ch );
+	printf( "\n\nE: " );
 	puts( msg );
 	exit( 1 );
 }
@@ -79,6 +93,7 @@ BOOL procI()
 	char buf[MAX_ID_LEN+1] = { 0 };
 	int i = 0;
 
+	/* reading literal */
 	while( is_letter( ch ) && i < MAX_ID_LEN ) {
 		buf[i] = ch;
 		++i;
@@ -89,7 +104,7 @@ BOOL procI()
 		error( "Unexpected end of file" );
 	}
 
-	/* no identifier provided */
+	/* no literal provided */
 	if( i == 0 ) {
 		error( "Expected identifier or constant" );
 	}
@@ -123,6 +138,7 @@ BOOL * procL()
 	char buf[MAX_ID_LEN+1] = { 0 };
 	int i = 0;
 
+	/* reading literal */
 	while( is_letter( ch ) && i < MAX_ID_LEN ) {
 		buf[i] = ch;
 		++i;
@@ -150,10 +166,6 @@ BOOL * procL()
 		error( "Constants \"true\" and \"false\" can't be used as identifiers" );
 	}
 
-	if( ch != ',' ) {
-		error( "Syntax error. Expecting `,' after identifier" );
-	}
-
 	/* checking if identifier is already defined */
 	for( i = 0; i < var_count; ++i ) {
 		if( strcmp( vars[i].name, buf ) == 0 ) {
@@ -177,15 +189,21 @@ BOOL procM()
 	BOOL val;
 	if( ch == '~' ) {
 		get();
+		skip_spaces();
 		val = !procM();
 	}
 	else if( ch == '(' ) {
 		get();
+		skip_spaces();
+		/*putchar('E');*/
 		val = procE();
-		get();
+		/*putchar( '/' );*/
+		/*putchar('E');*/
+		skip_spaces();
 		if( ch != ')' ) {
 			error( "Syntax error: probably missed closing `)'" );
 		}
+		get();
 	}
 	else if( is_letter( ch ) ) {
 		val = procI();
@@ -199,10 +217,18 @@ BOOL procM()
 BOOL procT()
 {
 	BOOL val;
+	/*putchar('M');*/
 	val = procM();
+	/*putchar( '/' );*/
+	/*putchar('M');*/
+	skip_spaces();
 	if( ch == '&' ) {
 		get();
+		skip_spaces();
+		/*putchar('T');*/
 		val &= procT();
+		/*putchar( '/' );*/
+		/*putchar('T');*/
 	}
 	return val;
 }
@@ -210,10 +236,18 @@ BOOL procT()
 BOOL procE()
 {
 	BOOL val;
+	/*putchar('T');*/
 	val = procT();
+	/*putchar( '/' );*/
+	/*putchar('T');*/
+	skip_spaces();
 	if( ch == '|' ) {
 		get();
+		skip_spaces();
+		/*putchar('E');*/
 		val |= procE();
+		/*putchar( '/' );*/
+		/*putchar('E');*/
 	}
 	return val;
 }
@@ -223,16 +257,26 @@ void procS( int num )
 	printf( "  Operator #%d:\t", num );
 	if( ch == '(' ) {
 		get();
+		skip_spaces();
 		BOOL * val = procL();
-		/* skipping a comma */
+
+		skip_spaces();
+
+		if( ch != ',' ) {
+			error( "Syntax error: expected `,'" );
+		}
 		get();
+
+		skip_spaces();
 		*val = procE();
+		skip_spaces();
+
 		if( ch != ')' ) {
 			error( "Syntax error: expected `)'" );
 		}
 	}
 	else {
-		error( "Expecting operator" );
+		error( "Expected operator" );
 	}
 	get();
 }
@@ -243,13 +287,12 @@ void parse()
 	get();
 	int op = 1;
 	while( ch != EOF ) {
-		while( isspace( ch ) ) {
-			get();
-		}
+		skip_spaces();
 		if( ch != EOF ) {
 			procS( op );
 			printf( "  ->  " );
 			print_var( last_assigned );
+			skip_trailing();
 		}
 		++op;
 	}

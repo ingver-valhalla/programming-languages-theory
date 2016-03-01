@@ -1,3 +1,10 @@
-(a,true)(b,false|true)(c,a&b)(d,c&false)
-(e,a&a&a&a&a&a|b&b&b&b&b&b&b)
-(a,(false))(d,d|true&a&~a)
+(a ,
+ true)
+(b, false | true)
+(c, a & b )      
+   
+	(d, c & false )
+(e , a & a & a | b & b & b & b)
+(a, ( false| true ) & false & d )
+(d, d | true & a & ~ a )
+(a, d|a&(true|(false|false)&b)|b)
