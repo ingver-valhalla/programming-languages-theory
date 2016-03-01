@@ -1,0 +1,7 @@
+S ::= (I,E)
+E ::= E"|"T | T
+T ::= T&M | M
+M ::= ~M | (E) | I | D
+I ::= AI | A
+A ::= a | ... | z
+D ::= true | false
