@@ -1,6 +1,6 @@
 S ::= (I,E)
-E ::= E"|"T | T
-T ::= T&M | M
+E ::= T"|"E | T
+T ::= M&T | M
 M ::= ~M | (E) | I | D
 I ::= AI | A
 A ::= a | ... | z
