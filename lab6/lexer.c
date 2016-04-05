@@ -1,131 +1,100 @@
 // lexer.c
 
-#include <stdio.h>
-#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+#include "lexer.h"
 
-void printUsage(char* prog)
+int c = ' ';
+
+void get(FILE* fi)
 {
-	printf("Usage: %s INPUT_FILE [OUTPUT_FILE]\n", prog);
+	c = getc(fi);
 }
 
 int isLetter(int c)
 {
 	if(c >= 'a' && c <= 'z')
 		return 1;
+
 	return 0;
 }
 
-int isPunct(int c)
+int isPunct(char c)
 {
-	char puncts[] = { '(', ',', ')', '|', '&', '~' };
-	int i;
-
-	for(i = 0; i < sizeof(puncts); ++i) {
-		if(c == puncts[i])
-			return 1;
-	}
-
-	return 0;
+	return c == lexOr
+	    || c == lexAnd
+	    || c == lexNeg
+	    || c == lexLParen
+	    || c == lexRParen
+	    || c == lexComma;
 }
 
 #define LEXEME_CHUNK 10
 
-int readLexeme(FILE* fi, int c)
+LexemeType readLexeme(FILE* fi)
 {
+	char* lexeme = (char*) malloc(LEXEME_CHUNK + 1);
 	int lexemeSize = LEXEME_CHUNK;
-	char* lexeme = (char*) malloc(lexemeSize + 1);
 	char* t = NULL;
-	lexeme[0] = c;
-	int curPos = 1;
+	int curPos = 0;
+	LexemeType lexType = 0;
 
-	while(EOF != (c = getc(fi))) {
+	while(c != EOF) {
 		if(!isLetter(c))
 			break;
-
+	
 		if(curPos == lexemeSize) {
 			t = (char*) realloc(lexeme, lexemeSize + LEXEME_CHUNK + 1);
 			if(t == NULL) {
-				free(lexeme);
 				perror("readLexeme: realloc():");
-				fclose(fi);
-				exit(4);
+				free(lexeme);
+				return lexError;
 			}
 			lexeme = t;
 			lexemeSize += LEXEME_CHUNK;
 		}
 		lexeme[curPos++] = c;
+		get(fi);
 	}
 
 	lexeme[curPos] = '\0';
 
 	if(0 == strcmp("true", lexeme)
-	   || 0 == strcmp("false", lexeme))
+		|| 0 == strcmp("false", lexeme))
 	{
-		putchar('D');
+		lexType = lexConst;
 	}
-	else
-		putchar('I');
-
-	fprintf(stderr, "lexeme: %s\n", lexeme);
+	else {
+		lexType = lexIdent;
+	}
 
 	free(lexeme);
-	return c;
+	return lexType;
 }
 
-void parse(FILE* fi)
+LexemeType getLexeme(FILE* fi)
 {
-	int c = 0;
+	LexemeType lex = 0;
 
-	c = getc(fi);
-	while(c != EOF) {
-		if(isspace(c)) {
-			c = getc(fi);
-		}
-		else if(isLetter(c)) {
-			c = readLexeme(fi, c);
-		}
-		else if(isPunct(c)) {
-			putchar(c);
-			c = getc(fi);
-		}
-		else {
-			fprintf(stderr, "Forbidden character: %c\n", c);
-			fclose(fi);
-			exit(3);
-		}
+	while(isspace(c)) {
+		get(fi);
 	}
+
+	if(isLetter(c)) {
+		lex = readLexeme(fi);
+	}
+	else if(isPunct(c)) {
+		lex = c;
+		get(fi);
+	}
+	else if(c == EOF) {
+		lex = lexNone;
+	}
+	else {
+		fprintf(stderr, "\nForbidden character: `%c'\n", c);
+		lex = lexError;
+	}
+
+	return lex;
 }
-
-int main(int argc, char** argv)
-{
-	FILE* fi;
-
-	if(argc < 2 || argc > 3) {
-		printUsage(argv[0]);
-		exit(0);
-	}
-
-	fi = fopen(argv[1], "r");
-	if(fi == NULL) {
-		fprintf(stderr, "Can't open file %s\n", argv[1]);
-		exit(1);
-	}
-
-	if(argc == 3) {
-		/* redirecting stdout to OUTPUT_FILE */
-		if( NULL == freopen(argv[2], "w", stdout)) {
-			fprintf(stderr, "Can't open file %s\n", argv[2]);
-			fclose(fi);
-			exit(2);
-		}
-	}
-
-	parse(fi);
-
-	fclose(fi);
-
-	return 0;
-}
-
