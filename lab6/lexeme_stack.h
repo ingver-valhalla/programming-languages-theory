@@ -5,10 +5,15 @@
 
 #include "lexer.h"
 
+extern Lexeme* lexStack;
+extern int lexStackSize;
+extern int lexStackTop;
+
 int initStack();
-int enlargeStack();
-void stackPush(LexemeType lex);
-LexemeType stackPop();
+void stackPush(Lexeme lex);
+Lexeme stackPeek();
+Lexeme stackPop();
 int freeStack();
+void printStack();
 
 #endif // LEXEME_STACK

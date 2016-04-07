@@ -4,6 +4,10 @@
 #include <string.h>
 #include <ctype.h>
 #include "lexer.h"
+#include "symbol_table.h"
+
+const char* STRUE = "true";
+const char* SFALSE = "false";
 
 int c = ' ';
 
@@ -30,52 +34,64 @@ int isPunct(char c)
 	    || c == lexComma;
 }
 
-#define LEXEME_CHUNK 10
+#define lexChunk 10
 
-LexemeType readLexeme(FILE* fi)
+Lexeme readLexeme(FILE* fi)
 {
-	char* lexeme = (char*) malloc(LEXEME_CHUNK + 1);
-	int lexemeSize = LEXEME_CHUNK;
+	char* lexeme = (char*) malloc(lexChunk + 1);
+	int lexemeSize = lexChunk;
 	char* t = NULL;
-	int curPos = 0;
-	LexemeType lexType = 0;
+	int lexPos = 0;
+	Lexeme lex;
 
 	while(c != EOF) {
 		if(!isLetter(c))
 			break;
 	
-		if(curPos == lexemeSize) {
-			t = (char*) realloc(lexeme, lexemeSize + LEXEME_CHUNK + 1);
+		if(lexPos == lexemeSize) {
+			t = (char*) realloc(lexeme, lexemeSize + lexChunk + 1);
 			if(t == NULL) {
 				perror("readLexeme: realloc():");
 				free(lexeme);
-				return lexError;
+				lex.type = lexError;
+				return lex;
 			}
 			lexeme = t;
-			lexemeSize += LEXEME_CHUNK;
+			lexemeSize += lexChunk;
 		}
-		lexeme[curPos++] = c;
+		lexeme[lexPos++] = c;
 		get(fi);
 	}
 
-	lexeme[curPos] = '\0';
+	lexeme[lexPos] = '\0';
 
-	if(0 == strcmp("true", lexeme)
-		|| 0 == strcmp("false", lexeme))
-	{
-		lexType = lexConst;
+	if(0 == strcmp(STRUE, lexeme)) {
+		lex.type = lexConst;
+		lex.val = TRUE;
+	}
+	else if(0 == strcmp(SFALSE, lexeme)) {
+		lex.type = lexConst;
+		lex.val = FALSE;
 	}
 	else {
-		lexType = lexIdent;
+		/*printf("trying to add a symbol `%s'\n", lexeme);*/
+		if(!addSymbol(lexeme)) {
+			fprintf(stderr, "readLexeme(): can't add a symbol to table\n");
+			free(lexeme);
+			lex.type = lexError;
+			return lex;
+		}
+		lex.type = lexIdent;
+		lex.ident = lexeme;
+		/*printf("added\n");*/
 	}
 
-	free(lexeme);
-	return lexType;
+	return lex;
 }
 
-LexemeType getLexeme(FILE* fi)
+Lexeme getLexeme(FILE* fi)
 {
-	LexemeType lex = 0;
+	Lexeme lex;
 
 	while(isspace(c)) {
 		get(fi);
@@ -85,16 +101,34 @@ LexemeType getLexeme(FILE* fi)
 		lex = readLexeme(fi);
 	}
 	else if(isPunct(c)) {
-		lex = c;
+		lex.type = c;
 		get(fi);
 	}
 	else if(c == EOF) {
-		lex = lexNone;
+		lex.type = lexBorder;
 	}
 	else {
 		fprintf(stderr, "\nForbidden character: `%c'\n", c);
-		lex = lexError;
+		lex.type = lexError;
 	}
 
 	return lex;
+}
+void printLexeme(Lexeme lex)
+{
+	switch(lex.type) {
+		case lexRelation:
+			printf("%c ", lex.rel);
+			break;
+		case lexIdent:
+			printf("%c[%s] ", lex.type, lex.ident);
+			/*printf("%c ", lex.type);*/
+			break;
+		case lexConst:
+			printf("%c[%d] ", lex.type, lex.val);
+			/*printf("%c ", lex.type);*/
+			break;
+		default:
+			printf("%c ", lex.type);
+	}
 }

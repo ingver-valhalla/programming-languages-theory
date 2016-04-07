@@ -5,14 +5,18 @@
 #include "lexeme_stack.h"
 
 
-#define lexStackChunk 50
-LexemeType* lexStack = NULL;
+#define lexStackChunk 10
+Lexeme* lexStack = NULL;
 int lexStackSize = 0;
-int lexStackTop = -1;
+int lexStackTop = 0;
 
 int initStack()
 {
-	lexStack = (LexemeType*) malloc(sizeof(LexemeType)*lexStackChunk);
+	if(lexStack != NULL) {
+		fprintf(stderr, "initStack: stack is already allocated\n");
+		return 0;
+	}
+	lexStack = (Lexeme*) malloc(sizeof(Lexeme)*lexStackChunk);
 	if(lexStack == NULL) {
 		perror("malloc()");
 		return 0;
@@ -23,17 +27,22 @@ int initStack()
 
 int enlargeStack()
 {
-	lexStack = (LexemeType*) realloc(lexStack,
-	                                 sizeof(LexemeType) * (lexStackSize + lexStackChunk));
 	if(lexStack == NULL) {
+		fprintf(stderr, "enlargeStack: stack isn't allocated\n");
+		return 0;
+	}
+	Lexeme* t = (Lexeme*) realloc(lexStack,
+	                              sizeof(Lexeme)*(lexStackSize + lexStackChunk));
+	if(t == NULL) {
 		perror("realloc()");
 		return 0;
 	}
+	lexStack = t;
 	lexStackSize += lexStackChunk;
 	return 1;
 }
 
-void stackPush(LexemeType lex)
+void stackPush(Lexeme lex)
 {
 	if(lexStack == NULL) {
 		fprintf(stderr, "stackPush(): stack is not allocated\n");
@@ -44,26 +53,53 @@ void stackPush(LexemeType lex)
 			return;
 		}
 	}
-	lexStack[++lexStackTop] = lex;
+	lexStack[lexStackTop++] = lex;
 }
 
-LexemeType stackPop()
+Lexeme stackPop()
 {
+	Lexeme ret = stackPeek();
+	--lexStackTop;
+	return ret;
+}
+
+Lexeme stackPeek()
+{
+	Lexeme ret;
 	if(lexStack == NULL) {
-		fprintf(stderr, "stackPop(): stack is not allocated\n");
+		fprintf(stderr, "stackPeek(): stack is not allocated\n");
+		ret.type = lexError;
+		return ret;
 	}
-	if(lexStackTop < 0) {
-		fprintf(stderr, "stackPop(): stack is empty\n");
+	if(lexStackTop < 1) {
+		fprintf(stderr, "stackPeek(): stack is empty\n");
+		ret.type = lexError;
+		return ret;
 	}
-	return lexStack[lexStackTop--];
+	return lexStack[lexStackTop-1];
 }
 
 int freeStack()
 {
 	if(lexStack == NULL) {
-		fprintf(stderr, "destroyStack(): stack is not allocated\n");
+		fprintf(stderr, "freeStack(): stack is not allocated\n");
 		return 0;
 	}
 	free(lexStack);
+	lexStack = NULL;
+	lexStackSize = 0;
+	lexStackTop = 0;
 	return 1;
+}
+
+void printStack()
+{
+	int i = 0;
+	/*printf("size: %d, bytes: %d, addr: %p\n", lexStackSize, bytes_allocated, lexStack);*/
+	printf("STACK: ");
+	for( ; i < lexStackTop; ++i) {
+		printLexeme(lexStack[i]);
+	}
+	putchar('@');
+	putchar('\n');
 }
