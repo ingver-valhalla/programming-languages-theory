@@ -129,6 +129,16 @@ void printLexeme(Lexeme lex)
 			/*printf("%c ", lex.type);*/
 			break;
 		default:
-			printf("%c ", lex.type);
+			if(lex.type != '('
+			   && lex.type != ')'
+			   && lex.type != ','
+			   && lex.type != '&'
+			   && lex.type != '|')
+			{
+				printf("%c[%d] ", lex.type, lex.val);
+			}
+			else {
+				printf("%c ", lex.type);
+			}
 	}
 }

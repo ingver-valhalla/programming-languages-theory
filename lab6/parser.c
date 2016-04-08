@@ -6,6 +6,7 @@
 #include "parser.h"
 #include "lexeme_stack.h"
 #include "symbol_table.h"
+#include "code_gen.h"
 
 /*
  *typedef short BOOL;
@@ -29,9 +30,21 @@
  * Lexer takes identifiers and constants as individual lexemes.
  */
 
+void parse(FILE* fi);
+int handleLexeme(Lexeme lex);
+int rollUp(Lexeme lex);
+int specialRollUp();
+int findRule(Lexeme* roll, int size);
+int getIndex(char c);
+RelationType getRelation(LexemeType l, LexemeType r);
+int isTerminal(LexemeType t);
+int isOperation(LexemeType t);
+int evalExpression(Lexeme* arr, int size, BOOL* result);
+
+
 typedef struct {
 	char  left;
-	const char* right;
+	char* right;
 } Rule;
 
 const Rule ruleSet[] = {
@@ -52,8 +65,8 @@ const int rulesCount = sizeof(ruleSet) / sizeof(Rule);
 
 const char alphabet[] = "#PSETM(,)|&~ID";
 const int alphabetSize = sizeof(alphabet) / sizeof(char);
-const char nonterminals[] = "PSLETM";
-const char terminals[] = "(,)|&~ID";
+/*const char nonterminals[] = ;*/
+/*const char terminals[] = ;*/
 
 const RelationType precMatrix[14][14] = {
 	//  #   P   S   E   T   M   (   ,   )   |   &   ~   I   D 
@@ -73,15 +86,68 @@ const RelationType precMatrix[14][14] = {
 	 { ' ',' ',' ',' ',' ',' ',' ',' ','>','>','>',' ',' ',' ' }, // D
 };
 
-int findRule(const char* s)
+int findRule(Lexeme* roll, int size)
 {
+	int ruleIndex = 0;
 	int i = 0;
-	for( ; i < rulesCount; ++i) {
-		if(0 == strcmp(ruleSet[i].right, s)) {
-			return i;
+	char* p = NULL;
+
+	for( ; ruleIndex < rulesCount; ++ruleIndex) {
+		/*printf("checking rule %s\n", ruleSet[ruleIndex].right);*/
+		for( i = size - 1, p = ruleSet[ruleIndex].right; i >= 0 && *p; --i, ++p ) {
+			if(roll[i].type != *p) {
+				break;
+			}
+		}
+		if(!*p && i < 0) {
+			return ruleIndex;
 		}
 	}
 	return -1;
+}
+
+int evalExpression(Lexeme* roll, int size, BOOL* result)
+{
+	BOOL* varValue;
+	// assignment
+	if(size == 5) {
+		if(!addVar(roll[3].ident, roll[1].val)) {
+			return 0;
+		}
+		printVarTable();
+	}
+	// binary operation
+	else if(size == 3) {
+		if(roll[1].type == '|') {
+			*result = roll[0].val | roll[2].val;
+			return 1;
+		}
+		else if(roll[1].type == '&') {
+			*result = roll[0].val & roll[2].val;
+			return 1;
+		}
+	}
+	// unary operation ~
+	else if(size == 2) {
+		if(roll[1].type == '~') {
+			*result = !roll[0].val;
+			return 1;
+		}
+	}
+	else if(size == 1) {
+		if(roll[0].type == lexIdent) {
+			varValue = getVariable(roll[0].ident);
+			if(varValue == NULL) {
+				fprintf(stderr, "evalExpression: var `%s' is not defined\n", roll[0].ident);
+				return 0;
+			}
+			*result = *varValue;
+		}
+		else {
+			*result = roll[0].val;
+		}
+	}
+	return 1;
 }
 
 int getIndex(char c)
@@ -107,9 +173,7 @@ RelationType getRelation(LexemeType l, LexemeType r)
 	return precMatrix[li][ri];
 }
 
-int handleLexeme(Lexeme lex);
-
-int specialRollUp()
+int specialRollUp(Lexeme T)
 {
 	Lexeme special = {'E'}, top = stackPop();
 	while(top.type != 'E') {
@@ -118,6 +182,7 @@ int specialRollUp()
 		}
 		top = stackPop();
 	}
+	special.val = top.val | T.val;
 	top = stackPop();
 	/*printf("handling SPECIAL\n");*/
 	if(!handleLexeme(special))
@@ -127,80 +192,105 @@ int specialRollUp()
 
 int rollUp(Lexeme lex)
 {
-#define maxRollLen 5
+#define maxRollSize 5
 	// top of stack will be placed here
 	// max rule length = 5
-	char roll[5+1] = {0};
-	int i = 4;
+	Lexeme roll[maxRollSize];
+	int rollSize = 0;
+	BOOL rollValue = FALSE;
+	
 	int readyToRoll = 0;
+	int preRelMet = 0;
+	
 	int ruleIndex = -1;
+	
 	Lexeme top;
 	Lexeme rolled;
 	RelationType lRel, rRel;
+	int i = 0;
 
-	/*printf("ROLLING UP:\n");*/
+	printf("ROLLING UP:\n");
 	while(1) {
 		top = stackPop();
 		if(top.type == lexError) {
+			printf("rollUp: got lexError\n");
 			return 0;
 		}
 
-		/*printf("\npopped: ");*/
-		/*printLexeme(top);*/
-		/*putchar('\n');*/
-		/*printStack();*/
+		printf("\npopped: ");
+		printLexeme(top);
+		putchar('\n');
+		printStack();
 
 		if(top.type == lexRelation) {
-			if(top.rel == relPre || top.rel == relPB) {
-				/*printf("pre-relation\n");*/
+			if(top.rel == relPre) {
+				printf("relPre met\n");
+				preRelMet = 1;
+				readyToRoll = 1;
+			}
+			else if(top.rel == relPB) {
+				printf("relPB met\n");
 				readyToRoll = 1;
 			}
 		}
-		else if(i < 0) {
-			/*printf("roll is full\n");*/
+		else if(rollSize >= maxRollSize) {
+			printf("roll is full\n");
 			readyToRoll = 1;
 		}
 		else {
-			roll[i--] = top.type;
+			roll[rollSize++] = top;
 		}
-		/*printf("roll[] : %s\n", roll + i + 1);*/
+		printf("roll[] :");
+		for(i = rollSize-1; i >= 0; --i) {
+			printLexeme(roll[i]);
+		}
+		printf("\n");
 
 		if(readyToRoll) {
-			ruleIndex = findRule(roll + i + 1);
+			ruleIndex = findRule(roll, rollSize);
 			if(ruleIndex < 0) {
-				/*printf("no such rule\n");*/
-				if(i < 0) {
-					/*printf("ended roll up\n");*/
+				printf("no such rule\n");
+				if(rollSize >= maxRollSize || preRelMet) {
+					printf("ended roll up\n");
 					return 0;
 				}
 				else {
-					/*printf("\nCONTINUE\n");*/
+					printf("\nCONTINUE\n");
 					readyToRoll = 0;
 					continue;
 				}
 			}
 			else {
+				printf("found rule: %c -> %s\n", ruleSet[ruleIndex].left, ruleSet[ruleIndex].right);
+				if(!evalExpression(roll, rollSize, &rollValue)) {
+					printf("Can't evaluate expression\n");
+					return 0;
+				}
+				
 				rolled.type = ruleSet[ruleIndex].left;
-				/*printf("rolled : "); printLexeme(rolled); putchar('\n');*/
+				rolled.val = rollValue;
+				printf("rolled : "); printLexeme(rolled); putchar('\n');
 
 				lRel = getRelation(stackPeek().type, rolled.type);
 
-				/*printf("handle rolled `%c'>>>>>\n", rolled.type);*/
+				printf("handle rolled `%c'>>>>>\n", rolled.type);
 				if(!handleLexeme(rolled)) {
+					printf("rollUp: can't handle rolled\n");
 					return 0;
 				}
 
 				rRel = getRelation(rolled.type, lex.type);
-				if(lRel == relPB && rRel == relPost) {
-					/*printf("SUPER SPECIAL SITUATION!!!!\n");*/
-					if(!specialRollUp()) {
-						/*printf("FATAL ERROR IN SPECIAL SITUATION\n");*/
+				if(rolled.type == 'T' && lRel == relPB && rRel == relPost) {
+					printf("SUPER SPECIAL SITUATION!!!!\n");
+					if(!specialRollUp(rolled)) {
+						printf("FATAL ERROR IN SPECIAL SITUATION\n");
 						return 0;
 					}
 				}
 
-				/*printf("handle last `%c'>>>>>\n", lex.type);*/
+				printf("handle last `%c'>>>>>\n", lex.type);
 				if(!handleLexeme(lex)) {
+					printf("rollUp: can't handle last\n");
 					return 0;
 				}
 				break;
@@ -208,7 +298,7 @@ int rollUp(Lexeme lex)
 		}
 	}
 	return 1;
-#undef maxRollLen
+#undef maxRollSize
 }
 
 // processes a lexeme according to its type
@@ -223,7 +313,7 @@ int handleLexeme(Lexeme lex)
 	else {
 		rel.rel = getRelation(top.type, lex.type);
 		if(rel.rel == relNone) {
-			/*printf("No such relation\n");*/
+			printf("handleLexeme: No such relation\n");
 			fprintf(stderr, "Syntax error\n");
 			return 0;
 		}
@@ -240,29 +330,52 @@ int handleLexeme(Lexeme lex)
 		else {
 			printf("handleLexeme: `%c' => SHIFT\n", lex.type);
 
+			/*if(lex.type == lexComma) {*/
+				/*Triad* varLoad = createTriad();*/
+				/*setOperation(varLoad, opVar);*/
+				/*setOperand(varLoad, trVar, lex)*/
+			/*}*/
 			stackPush(rel);
 			stackPush(lex);
 		}
 	}
 	printStack();
-	/*printf("FINISHED HANDLING "); printLexeme(lex); printf("\n");*/
-	/*printf("\n");*/
+	printf("FINISHED HANDLING "); printLexeme(lex); printf("\n");
+	printf("\n");
 	return 1;
 }
 
+int init()
+{
+	if(!initSymTable()) {
+		fprintf(stderr, "init: can't init symbol table\n");
+		return 0;
+	}
+	if(!initStack()) {
+		freeSymTable();
+		fprintf(stderr, "init: can't init stack\n");
+		return 0;
+	}
+	if(!initVarTable()) {
+		freeSymTable();
+		freeStack();
+		fprintf(stderr, "init: can't init var table\n");
+	}
+	return 1;
+}
+
+void terminate()
+{
+	freeSymTable();
+	freeStack();
+	freeVarTable();
+}
 
 // gets lexemes one-by-one and makes syntactic analysis
 void parse(FILE* fi)
 {
-	if(!initSymTable()) {
-		fprintf(stderr, "parse: can't init symbol table\n");
+	if(!init())
 		return;
-	}
-	if(!initStack()) {
-		freeSymTable();
-		fprintf(stderr, "parse: can't init stack\n");
-		return;
-	}
 
 	Lexeme lex = { lexBorder };
 	stackPush(lex);
@@ -280,9 +393,10 @@ void parse(FILE* fi)
 		fprintf(stderr, "\nError occured while parsing a file\n");
 	}
 	printf("Ended parsing\n");
-	printStack();
+	/*printStack();*/
 	printSymTable();
-	freeSymTable();
-	freeStack();
+	printVarTable();
 	putchar('\n');
+
+	terminate();
 }
