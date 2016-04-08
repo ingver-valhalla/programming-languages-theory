@@ -100,14 +100,91 @@ void printVarTable()
 	for( ; i < varCount; ++i) {
 		printf("%s = %s\n", vars[i].name, vars[i].val ? "true" : "false");
 	}
-	printf("\n=========================\n");
+	printf("=========================\n");
 }
 
 // the list of triads of intremediate code
-Triad * ListHead = NULL;
-Triad * ListTail = NULL;
-int triads_count = 0;
+Triad * listHead = NULL;
+Triad * listTail = NULL;
 
+#define numStackChunk 10
+int* numStack = NULL;
+int numStackCap = 0;
+int numStackTop = 0;
+int triadsCount = 0;
+
+int initNumStack()
+{
+	if(numStack != NULL) {
+		fprintf(stderr, "initNumStack: stack is already allocated\n");
+		return 0;
+	}
+	numStack = (int*) malloc(sizeof(int) * numStackChunk);
+	if(numStack == NULL) {
+		perror("initNumStack: malloc()");
+		return 0;
+	}
+	numStackCap = numStackChunk;
+	return 1;
+}
+
+int enlargeNumStack()
+{
+	if(numStack == NULL) {
+		fprintf(stderr, "enlargeNumStack: stack isn't allocated\n");
+		return 0;
+	}
+	int* t = (int*) realloc(numStack,
+	                        sizeof(int)*(numStackCap + numStackChunk));
+	if(t == NULL) {
+		perror("realloc()");
+		return 0;
+	}
+	numStack = t;
+	numStackCap += numStackChunk;
+	return 1;
+}
+
+int numStackPush(int num)
+{
+	if(numStack == NULL) {
+		fprintf(stderr, "numStackPush(): stack is not allocated\n");
+	}
+	if(numStackTop >= numStackCap) {
+		if(!enlargeNumStack()) {
+			fprintf(stderr, "numStackPush(): failed to enlarge stack\n");
+			return 0;
+		}
+	}
+	numStack[numStackTop++] = num;
+	return 1;
+}
+
+int numStackPop()
+{
+	if(numStack == NULL) {
+		fprintf(stderr, "stackPop(): stack is not allocated\n");
+		return -1;
+	}
+	if(numStackTop < 1) {
+		fprintf(stderr, "stackPop(): stack is empty\n");
+		return -1;
+	}
+	return numStack[--numStackTop];
+}
+
+int freeNumStack()
+{
+	if(numStack == NULL) {
+		fprintf(stderr, "freeStack(): stack is not allocated\n");
+		return 0;
+	}
+	free(numStack);
+	numStack = NULL;
+	numStackCap = 0;
+	numStackTop = 0;
+	return 1;
+}
 
 int printTriadOp(TriadOp op)
 {
@@ -131,7 +208,7 @@ int printTriadOp(TriadOp op)
 	return 1;
 }
 
-int print_triad(const Triad* tr)
+int printTriad(Triad* tr)
 {
 	if( tr == NULL )
 		return 0;
@@ -141,29 +218,29 @@ int print_triad(const Triad* tr)
 		return 0;
 	}
 	printf(", " );
-	if(!printTriadOp( tr->second )) {
+	if(!printTriadOp(tr->second)) {
 		return 0;
 	}
 	printf(")\n" );
 	return 1;
 }
 
-void setOperation(Triad* tr,Operations op)
+void setOperation(Triad* tr, Operations op)
 {
 	tr->operation = op;
 }
-int set_operand(TriadOp* op, TriadOpType t, void* val)
+int setOperand(TriadOp* op, TriadOpType t, void* val)
 {
 	op->type = t;
 	switch(t) {
 		case trVar:
-			op->var = (char *)val;
+			op->var = (char*) val;
 			break;
 		case trConst:
-			op->constVal = *(BOOL *)val;
+			op->constVal = *(BOOL*) val;
 			break;
 		case trPtr:
-			op->ptr = *(int *)val;
+			/*op->ptr = *(int *)val;*/
 			break;
 		case trDummy:
 			break;
@@ -174,7 +251,7 @@ int set_operand(TriadOp* op, TriadOpType t, void* val)
 	return 1;
 }
 
-Triad* create_triad()
+Triad* createTriad()
 {
 	Triad* p = (Triad *)calloc(sizeof(Triad), 1);
 	if(p == NULL) {
@@ -183,42 +260,63 @@ Triad* create_triad()
 	return p;
 }
 
-int append_triad(Triad* tr)
+int appendTriad(Triad* tr)
 {
 	if(tr == NULL)
 		return 0;
-	
+	if(numStack == NULL && !initNumStack())
+		return 0;
+
 	tr->next = NULL;
-	if(ListTail == NULL) {
-		ListHead = tr;
-		ListTail = tr;
+	if(listTail == NULL) {
+		listHead = tr;
+		listTail = tr;
 	}
 	else {
-		ListTail->next = tr;
-		ListTail = tr;
+		listTail->next = tr;
+		listTail = tr;
 	}
+	if(tr->second.type == trPtr) {
+		tr->second.ptr = numStackPop();
+		if(tr->second.ptr < 0) {
+			return 0;
+		}
+	}
+	if(tr->first.type == trPtr) {
+		tr->first.ptr = numStackPop();
+		if(tr->first.ptr < 0) {
+			return 0;
+		}
+	}
+	if(tr->operation != opAssign) {
+		if(!numStackPush(triadsCount+1)) {
+			return 0;
+		}
+	}
+	++triadsCount;
 	return 1;
 }
 
-void print_list()
+void printTriadList()
 {
 	int i = 0;
-	Triad* p = ListHead;
+	Triad* p = listHead;
 	
 	while(p != NULL) {
 		++i;
-		printf("%2d:\t ", i);
-		print_triad( p );
+		printf("%4d:\t ", i);
+		printTriad( p );
 		p = p->next;
 	}
 }
 
-void clear_list()
+void clearTriadList()
 {
-	while(ListHead != NULL) {
-		Triad *p = ListHead;
-		ListHead = ListHead->next;
+	while(listHead != NULL) {
+		Triad *p = listHead;
+		listHead = listHead->next;
 		free(p);
 	}
-	ListTail = NULL;
+	listTail = NULL;
+	freeNumStack();
 }

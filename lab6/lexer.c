@@ -133,7 +133,8 @@ void printLexeme(Lexeme lex)
 			   && lex.type != ')'
 			   && lex.type != ','
 			   && lex.type != '&'
-			   && lex.type != '|')
+			   && lex.type != '|'
+			   && lex.type != '#')
 			{
 				printf("%c[%d] ", lex.type, lex.val);
 			}

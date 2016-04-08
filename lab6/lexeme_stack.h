@@ -5,8 +5,8 @@
 
 #include "lexer.h"
 
-int initStack();
-void stackPush(Lexeme lex);
+int initLexStack();
+int stackPush(Lexeme lex);
 Lexeme stackPeek();
 Lexeme stackPop();
 int freeStack();

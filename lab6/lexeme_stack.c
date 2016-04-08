@@ -10,10 +10,10 @@ Lexeme* lexStack = NULL;
 int lexStackSize = 0;
 int lexStackTop = 0;
 
-int initStack()
+int initLexStack()
 {
 	if(lexStack != NULL) {
-		fprintf(stderr, "initStack: stack is already allocated\n");
+		fprintf(stderr, "initLexStack: stack is already allocated\n");
 		return 0;
 	}
 	lexStack = (Lexeme*) malloc(sizeof(Lexeme)*lexStackChunk);
@@ -42,7 +42,7 @@ int enlargeStack()
 	return 1;
 }
 
-void stackPush(Lexeme lex)
+int stackPush(Lexeme lex)
 {
 	if(lexStack == NULL) {
 		fprintf(stderr, "stackPush(): stack is not allocated\n");
@@ -50,10 +50,11 @@ void stackPush(Lexeme lex)
 	if(lexStackTop >= lexStackSize) {
 		if(!enlargeStack()) {
 			fprintf(stderr, "stackPush(): failed to enlarge stack\n");
-			return;
+			return 0;
 		}
 	}
 	lexStack[lexStackTop++] = lex;
+	return 1;
 }
 
 Lexeme stackPop()

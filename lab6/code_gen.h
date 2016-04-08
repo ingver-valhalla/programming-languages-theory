@@ -51,11 +51,11 @@ void freeVarTable();
 void printVarTable();
 
 int printTriadOp(TriadOp op);
-int printTriad(const Triad* tr);
+int printTriad(Triad* tr);
 void setOperation(Triad* tr, Operations operation);
 int setOperand(TriadOp* op, TriadOpType t, void* val);
-Triad* create_triad();
-void appendTriad(Triad * tr);
+Triad* createTriad();
+int appendTriad(Triad * tr);
 void printTriadList();
 void clearTriadList();
 
