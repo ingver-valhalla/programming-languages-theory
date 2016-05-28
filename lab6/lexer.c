@@ -47,7 +47,7 @@ Lexeme readLexeme(FILE* fi)
 	while(c != EOF) {
 		if(!isLetter(c))
 			break;
-	
+
 		if(lexPos == lexemeSize) {
 			t = (char*) realloc(lexeme, lexemeSize + lexChunk + 1);
 			if(t == NULL) {
@@ -142,4 +142,5 @@ void printLexeme(Lexeme lex)
 				printf("%c ", lex.type);
 			}
 	}
+	fflush(stdout);
 }

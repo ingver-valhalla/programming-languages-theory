@@ -8,6 +8,9 @@
 #include "symbol_table.h"
 #include "code_gen.h"
 
+//#define DEBUG
+#define OPTIMIZE
+
 /*
  *typedef short BOOL;
  *#define TRUE ((BOOL)1)
@@ -16,7 +19,7 @@
 
 /*
  * Grammar:
- * 
+ *
  * P ::= PS | S
  * S ::= (I,E)
  * E ::= E"|"T | T
@@ -25,7 +28,7 @@
  * I ::= IA | A
  * A ::= a | .. | z
  * D ::= true | false
- * 
+ *
  * I and D are considered terminals.
  * Lexer takes identifiers and constants as individual lexemes.
  */
@@ -69,7 +72,7 @@ const int alphabetSize = sizeof(alphabet) / sizeof(char);
 /*const char terminals[] = ;*/
 
 const RelationType precMatrix[14][14] = {
-	//  #   P   S   E   T   M   (   ,   )   |   &   ~   I   D 
+	//  #   P   S   E   T   M   (   ,   )   |   &   ~   I   D
 	 { ' ','+','<',' ',' ',' ','<',' ',' ',' ',' ',' ',' ',' ' }, // #
 	 { '=',' ','=',' ',' ',' ','<',' ',' ',' ',' ',' ',' ',' ' }, // P
 	 { '>',' ',' ',' ',' ',' ','>',' ',' ',' ',' ',' ',' ',' ' }, // S
@@ -93,13 +96,24 @@ int findRule(Lexeme* roll, int size)
 	char* p = NULL;
 
 	for( ; ruleIndex < rulesCount; ++ruleIndex) {
-		/*printf("checking rule %s\n", ruleSet[ruleIndex].right);*/
-		for( i = size - 1, p = ruleSet[ruleIndex].right; i >= 0 && *p; --i, ++p ) {
+
+
+#ifdef DEBUG
+		printf("checking rule %s\n", ruleSet[ruleIndex].right);
+#endif
+
+
+//		for( i = size - 1, p = ruleSet[ruleIndex].right; i >= 0 && *p; --i, ++p ) {
+//			if(roll[i].type != *p) {
+//				break;
+//			}
+//		}
+		for( i = 0, p = ruleSet[ruleIndex].right; i < size && *p; ++i, ++p ) {
 			if(roll[i].type != *p) {
 				break;
 			}
 		}
-		if(!*p && i < 0) {
+		if(!*p && i >= size) {
 			return ruleIndex;
 		}
 	}
@@ -112,7 +126,7 @@ int evalExpression(Lexeme* roll, int size, BOOL* result)
 	Triad* tr = createTriad();
 	// assignment
 	if(size == 5) {
-		if(!addVar(roll[3].ident, roll[1].val)) {
+		if(!addVar(roll[1].ident, roll[3].val)) {
 			free(tr);
 			return 0;
 		}
@@ -134,6 +148,7 @@ int evalExpression(Lexeme* roll, int size, BOOL* result)
 			*result = roll[0].val & roll[2].val;
 			setOperation(tr, opAnd);
 		}
+		// for M ::= (E)
 		else {
 			*result = roll[1].val;
 			free(tr);
@@ -151,6 +166,7 @@ int evalExpression(Lexeme* roll, int size, BOOL* result)
 			setOperand(&tr->first, trPtr, NULL);
 			appendTriad(tr);
 		}
+		// for P ::= PS
 		else {
 			free(tr);
 			*result = roll[0].val;
@@ -175,6 +191,7 @@ int evalExpression(Lexeme* roll, int size, BOOL* result)
 			appendTriad(tr);
 			*result = roll[0].val;
 		}
+		// for E ::= T, T ::= M, ...
 		else {
 			*result = roll[0].val;
 		}
@@ -218,7 +235,13 @@ int specialRollUp(Lexeme T)
 	}
 	special.val = top.val | T.val;
 	top = stackPop();
-	/*printf("handling SPECIAL\n");*/
+
+
+#ifdef DEBUG
+	printf("handling SPECIAL\n");
+#endif
+
+
 	if(!handleLexeme(special)) {
 		free(orTriad);
 		return 0;
@@ -238,108 +261,116 @@ int rollUp(Lexeme lex)
 	Lexeme roll[maxRollSize];
 	int rollSize = 0;
 	BOOL rollValue = FALSE;
-	
+
 	int readyToRoll = 0;
 	int preRelMet = 0;
-	
+
 	int ruleIndex = -1;
-	
+
 	Lexeme top;
 	Lexeme rolled;
 	RelationType lRel, rRel;
-	/*int i = 0;*/
+	int i = 0;
 
-	/*printf("ROLLING UP:\n");*/
-	while(1) {
-		top = stackPop();
-		if(top.type == lexError) {
-			/*printf("rollUp: got lexError\n");*/
-			return 0;
-		}
+    const Lexeme* stack = getStackData();
+    if(stack == NULL) {
+#ifdef DEBUG
+        printf("rollUp: Stack is not allocated\n");
+#endif
+        return 0;
+    }
+    int stackSize = getStackSize();
+    if(stackSize == 0) {
+#ifdef DEBUG
+        printf("rollUp: Stack is not allocated\n");
+#endif
+        return 0;
+    }
+    int stackIter = 0;
 
-		/*printf("\npopped: ");*/
-		/*printLexeme(top);*/
-		/*putchar('\n');*/
-		/*printStack();*/
+#ifdef DEBUG
+	printf("ROLLING UP:\n");
+#endif
 
-		if(top.type == lexRelation) {
-			if(top.rel == relPre) {
-				/*printf("relPre met\n");*/
-				preRelMet = 1;
-				readyToRoll = 1;
-			}
-			else if(top.rel == relPB) {
-				/*printf("relPB met\n");*/
-				readyToRoll = 1;
-			}
-		}
-		else if(rollSize >= maxRollSize) {
-			/*printf("roll is full\n");*/
-			readyToRoll = 1;
-		}
-		else {
-			roll[rollSize++] = top;
-		}
-		/*printf("roll[] :");*/
-		/*for(i = rollSize-1; i >= 0; --i) {*/
-			/*printLexeme(roll[i]);*/
-		/*}*/
-		/*printf("\n");*/
+    printStack();
+    while(stackIter < stackSize) {
+        // searching for '<' of '+' relation
+        if(stack[stackIter].type == lexRelation) {
+            if(stack[stackIter].rel == relPre
+               || stack[stackIter].rel == relPB)
+            {
+                int it = stackIter + 1;
+                // get lexemes from stack
+                while(it < stackSize && rollSize < maxRollSize) {
+                    if(stack[it].type != lexRelation) {
+                        roll[rollSize++] = stack[it];
+                    }
+                    ++it;
+                }
 
-		if(readyToRoll) {
-			ruleIndex = findRule(roll, rollSize);
-			if(ruleIndex < 0) {
-				/*printf("no such rule\n");*/
-				if(rollSize >= maxRollSize || preRelMet) {
-					/*printf("ended roll up\n");*/
-					return 0;
-				}
-				else {
-					/*printf("\nCONTINUE\n");*/
-					readyToRoll = 0;
-					continue;
-				}
-			}
-			else {
-				/*printf("found rule: %c -> %s\n",*/
-					   /*ruleSet[ruleIndex].left,*/
-					   /*ruleSet[ruleIndex].right);*/
-				if(!evalExpression(roll, rollSize, &rollValue)) {
-					/*printf("Can't evaluate expression\n");*/
-					return 0;
-				}
-				
-				rolled.type = ruleSet[ruleIndex].left;
-				rolled.val = rollValue;
-				/*printf("rolled : "); printLexeme(rolled); putchar('\n');*/
+#ifdef DEBUG
+                printf("roll[] :");
+                for(i = 0; i < rollSize; ++i) {
+                    printLexeme(roll[i]);
+                }
+                printf("\n");
+                fflush(stdout);
+#endif
 
-				lRel = getRelation(stackPeek().type, rolled.type);
+                ruleIndex = findRule(roll, rollSize);
+                if(ruleIndex < 0) {
+#ifdef DEBUG
+                    printf("no such rule\n");
+                    fflush(stdout);
+#endif
+                    rollSize = 0;
+                }
+                else {
+#ifdef DEBUG
+                    printf("found rule: %c -> %s\n",
+                           ruleSet[ruleIndex].left,
+                           ruleSet[ruleIndex].right);
+                    fflush(stdout);
+#endif
+                    if(!evalExpression(roll, rollSize, &rollValue)) {
+#ifdef DEBUG
+                        printf("Can't evaluate expression\n");
+                        fflush(stdout);
+#endif
+                        return 0;
+                    }
 
-				/*printf("handle rolled `%c'>>>>>\n", rolled.type);*/
-				if(!handleLexeme(rolled)) {
-					/*printf("rollUp: can't handle rolled\n");*/
-					return 0;
-				}
+                    rolled.type = ruleSet[ruleIndex].left;
+                    rolled.val = rollValue;
+#ifdef DEBUG
+                    printf("rolled : "); printLexeme(rolled); putchar('\n');
+                    fflush(stdout);
+#endif
+                    while(--it >= stackIter)
+                        stackPop();
+#ifdef DEBUG
+                    printStack();
+#endif
 
-				rRel = getRelation(rolled.type, lex.type);
-				if(rolled.type == 'T' && lRel == relPB && rRel == relPost) {
-					/*printf("SUPER SPECIAL SITUATION!!!!\n");*/
-					if(!specialRollUp(rolled)) {
-						/*printf("FATAL ERROR IN SPECIAL SITUATION\n");*/
-						return 0;
-					}
-				}
+                    if(!handleLexeme(rolled)) {
+                        return 0;
+                    }
+                    if(!handleLexeme(lex)) {
+#ifdef DEBUG
+                        printf("rollUp: can't handle last\n");
+                        fflush(stdout);
+#endif
+                        return 0;
+                    }
+                    return 1;
+                }
 
-				/*printf("handle last `%c'>>>>>\n", lex.type);*/
-				if(!handleLexeme(lex)) {
-					/*printf("rollUp: can't handle last\n");*/
-					return 0;
-				}
-				break;
-			}
-		}
-	}
-	return 1;
+            }
+        }
+        ++stackIter;
+    }
+
+	return 0;
 #undef maxRollSize
 }
 
@@ -349,28 +380,56 @@ int handleLexeme(Lexeme lex)
 	Lexeme top = stackPeek();
 	Lexeme rel = {lexRelation};
 	if(top.type == lexError) {
-		/*printf("handleLexeme: got lexError\n");*/
+
+
+#ifdef DEBUG
+		printf("handleLexeme: got lexError\n");
+#endif
+
+
 		return 0;
 	}
 	else {
 		rel.rel = getRelation(top.type, lex.type);
 		if(rel.rel == relNone) {
-			/*printf("handleLexeme: No such relation\n");*/
+
+
+#ifdef DEBUG
+			printf("handleLexeme: No such relation\n");
+#endif
+
+
 			fprintf(stderr, "Syntax error\n");
 			return 0;
 		}
 		if(rel.rel == relPost) {
-			/*printf("\nhandleLexeme: `%c' => ROLL UP\n", lex.type);*/
+
+
+#ifdef DEBUG
+			printf("\nhandleLexeme: `%c' => ROLL UP\n", lex.type);
+#endif
+
 
 			if(!rollUp(lex)) {
-				/*printf("rollUp failed\n");*/
-				/*printf("Syntax error\n");*/
+
+
+#ifdef DEBUG
+				printf("rollUp failed\n");
+//				printf("Syntax error\n");
+#endif
+
+
 				return 0;
 			}
 
 		}
 		else {
-			/*printf("handleLexeme: `%c' => SHIFT\n", lex.type);*/
+
+
+#ifdef DEBUG
+			printf("handleLexeme: `%c' => SHIFT\n", lex.type);
+#endif
+
 
 			if(lex.type == lexComma) {
 				Triad* varLoad = createTriad();
@@ -386,9 +445,15 @@ int handleLexeme(Lexeme lex)
 			}
 		}
 	}
-	/*printStack();*/
-	/*printf("FINISHED HANDLING "); printLexeme(lex); printf("\n");*/
-	/*printf("\n");*/
+
+
+#ifdef DEBUG
+	printStack();
+	printf("FINISHED HANDLING "); printLexeme(lex); printf("\n");
+	printf("\n");
+#endif
+
+
 	return 1;
 }
 
@@ -429,26 +494,55 @@ void parse(FILE* fi)
 		terminate();
 		return;
 	}
-	/*printf("Initial stack state: ");*/
-	/*printStack();*/
+
+
+#ifdef DEBUG
+	printf("Initial stack state: ");
+	printStack();
+#endif
+
 
 	while(lexBorder != (lex = getLexeme(fi)).type) {
 		if(lex.type == lexError || !handleLexeme(lex)) {
 			fprintf(stderr, "\nError occured while parsing a file\n");
-			break;
+			terminate();
+			return;
 		}
-		/*printStack();*/
+
+
+#ifdef DEBUG
+		printStack();
+#endif
+
+
 	}
 	if(lex.type == lexBorder && !handleLexeme(lex)) {
 		fprintf(stderr, "\nError occured while parsing a file\n");
 	}
-	/*printf("Ended parsing\n");*/
-	/*printStack();*/
-	/*printSymTable();*/
-	/*printVarTable();*/
-	/*putchar('\n');*/
+
+
+#ifdef DEBUG
+	printf("Ended parsing\n");
+	printStack();
+	printSymTable();
+	printVarTable();
+	putchar('\n');
+#endif
+
+
 	printTriadList();
 	putchar('\n');
+
+#ifdef OPTIMIZE
+	printf("\n\n// Optimized:\n");
+	if(!optimize()) {
+	    printf("Failed optimization\n");
+	    terminate();
+        return;
+	}
+	printTriadList();
+	putchar('\n');
+#endif
 
 	terminate();
 }

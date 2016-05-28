@@ -1,4 +1,5 @@
-// code_gen.h
+// code_gen.c
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -22,7 +23,7 @@ int initVarTable()
 		return 0;
 	}
 	varTableCap = varTableChunk;
-	
+
 	return 1;
 }
 
@@ -39,7 +40,7 @@ int enlargeVarTable()
 	}
 	vars = t;
 	varTableCap += varTableChunk;
-	
+
 	return 1;
 }
 
@@ -212,7 +213,8 @@ int printTriad(Triad* tr)
 {
 	if( tr == NULL )
 		return 0;
-	
+
+    printf("%4d:\t ", tr->number);
 	printf("%c(", (char)tr->operation );
 	if(!printTriadOp(tr->first)) {
 		return 0;
@@ -293,7 +295,7 @@ int appendTriad(Triad* tr)
 			return 0;
 		}
 	}
-	++triadsCount;
+	tr->number = ++triadsCount;
 	return 1;
 }
 
@@ -301,10 +303,10 @@ void printTriadList()
 {
 	int i = 0;
 	Triad* p = listHead;
-	
+
 	while(p != NULL) {
 		++i;
-		printf("%4d:\t ", i);
+		//printf("%4d:\t ", i);
 		printTriad( p );
 		p = p->next;
 	}
@@ -319,4 +321,137 @@ void clearTriadList()
 	}
 	listTail = NULL;
 	freeNumStack();
+}
+
+int findTriad( int num, Triad ** pTriad, Triad ** pPrev )
+{
+	if( pTriad == NULL || pPrev == NULL ) {
+		return 1;
+	}
+	*pTriad = listHead;
+	while( *pTriad != NULL ) {
+		if( (*pTriad)->number == num ) {
+			return 1;
+		}
+		*pPrev = *pTriad;
+		*pTriad= (*pTriad)->next;
+	}
+	fprintf( stderr, "Triad #%d not found", num );
+	return 0;
+}
+
+int removeTriad( Triad ** pTriad, Triad * prev )
+{
+	if( pTriad == NULL || *pTriad == NULL )
+	{
+		return 0;
+	}
+	if( prev == NULL )
+		listHead = (*pTriad)->next;
+	else {
+		prev->next = (*pTriad)->next;
+	}
+	free( *pTriad );
+	*pTriad = NULL;
+	return 1;
+}
+
+int optimize()
+{
+	Triad * p = listHead;
+	Triad * q = NULL;
+	Triad * qprev = NULL;
+	TriadOp * toChange = NULL;
+	BOOL val = FALSE;
+
+	while( p != NULL ) {
+		// First rule:
+		// If the only operand of an unary operation or the right operand of a
+		// binary operation (except assignment) is a pointer to a constant
+		// loading triad, it's replaced by a constant itself and corresponding
+		// triad is deleted.
+
+		// checking arity of the operation
+		// the only unary operation is opNot
+		if( p->operation == opNot ) {
+			toChange = &p->first;
+		}
+		else {
+			toChange = &p->second;
+		}
+		// apply first rule
+		if( toChange->type == trPtr && p->operation != opAssign ) {
+			if(!findTriad( toChange->ptr, &q, &qprev )) {
+				return 0;
+			}
+			if( q->operation == opConst ) {
+				setOperand( toChange, trConst, &q->first.constVal );
+				removeTriad( &q, qprev );
+			}
+		}
+
+
+		// Second rule:
+		// If the only operand of the unary operation is a constant, evaluate
+		// the operation and replace the triad with constant loading.
+
+		// apply second rule
+		if( p->operation == opNot && toChange->type == trConst ) {
+			setOperation( p, opConst );
+			val = !toChange->constVal;
+			setOperand( toChange, trConst, &val);
+		}
+
+
+		//  Third rule:
+		//  If the first operand of a binary operation (except assignment) is a
+		//  pointer on constant loading and the second operand is a constant,
+		//  evaluate operation and replace the triad with loading of a result.
+		//  Previous loading operator is deleted.
+
+		// check arity
+		if( p->operation != opNot && p->operation != opAssign ) {
+			// apply third rule
+			if( p->first.type == trPtr && p->second.type == trConst ) {
+				findTriad( p->first.ptr, &q, &qprev );
+				if( q->operation == opConst ) {
+					if( p->operation == opOr ) {
+						val = q->first.constVal | p->second.constVal;
+					}
+					else if( p->operation == opAnd ) {
+						val = q->first.constVal & p->second.constVal;
+					}
+					else {
+						fprintf( stderr, "optimize(): Invalid operation: %c", p->operation );
+						return 0;
+					}
+					setOperation( p, opConst );
+					setOperand( &p->first, trConst, &val );
+					setOperand( &p->second, trDummy, NULL );
+					removeTriad( &q, qprev );
+				}
+			}
+		}
+
+
+		// Fourth rule:
+		// If the first operand of the assigment is pointer to variable triad,
+		// it is replaced by the name of a variable. Variable triad is deleted
+
+		// apply fourth rule
+		if( p->operation == opAssign ) {
+			findTriad( p->first.ptr, &q, &qprev );
+			if( q->operation == opVar ) {
+				setOperand( &p->first, trVar, q->first.var );
+				removeTriad( &q, qprev );
+			}
+			else {
+				fprintf( stderr, "optimize(): Fatal error. Only variables can be assigned to" );
+				clearTriadList();
+				return 0;
+			}
+		}
+        p = p->next;
+    }
+    return 1;
 }

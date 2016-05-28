@@ -5,6 +5,8 @@
 
 #include "lexer.h"
 
+const Lexeme* getStackData();
+int getStackSize();
 int initLexStack();
 int stackPush(Lexeme lex);
 Lexeme stackPeek();

@@ -10,6 +10,16 @@ Lexeme* lexStack = NULL;
 int lexStackSize = 0;
 int lexStackTop = 0;
 
+const Lexeme* getStackData()
+{
+    return lexStack;
+}
+
+int getStackSize()
+{
+    return lexStackTop;
+}
+
 int initLexStack()
 {
 	if(lexStack != NULL) {
@@ -103,4 +113,5 @@ void printStack()
 	}
 	putchar('@');
 	putchar('\n');
+	fflush(stdout);
 }

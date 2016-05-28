@@ -3,9 +3,7 @@
 #ifndef CODE_GEN_H
 #define CODE_GEN_H
 
-typedef char BOOL;
-#define TRUE   (BOOL)1
-#define FALSE  (BOOL)0
+#include "lexer.h"
 
 typedef struct {
 	char* name; // name from symbol table
@@ -42,6 +40,7 @@ typedef struct triad {
 	Operations operation;
 	TriadOp first, second;
 	struct triad* next;
+	int number;
 } Triad;
 
 int initVarTable();
@@ -58,5 +57,6 @@ Triad* createTriad();
 int appendTriad(Triad * tr);
 void printTriadList();
 void clearTriadList();
+int optimize();
 
 #endif // CODE_GEN_H
